@@ -1,0 +1,104 @@
+{
+  "themes": [
+    {
+      "id": "exam_stress",
+      "theme": "Dealing with exam pressure and performance anxiety",
+      "context": "Many teenagers face intense pressure around exams, boards, and entrance tests. The fear of not meeting expectations — their own or their parents' — can be overwhelming. Mindfulness can help them observe the anxiety without being consumed by it."
+    },
+    {
+      "id": "social_media_comparison",
+      "theme": "Comparing yourself to others on social media",
+      "context": "Teenagers spend hours scrolling through curated lives on Instagram and Snapchat. The constant comparison creates feelings of inadequacy. Mindfulness teaches us to notice when we're comparing, and gently come back to our own journey."
+    },
+    {
+      "id": "friendship_conflicts",
+      "theme": "Navigating friendship conflicts and feeling left out",
+      "context": "Friendships at this age can be intense and fragile. Being left out of a group, dealing with gossip, or losing a close friend feels like the end of the world. Compassion — for yourself and others — helps navigate these turbulent waters."
+    },
+    {
+      "id": "breath_awareness",
+      "theme": "Your breath is your superpower — a 2-minute reset",
+      "context": "The simplest mindfulness tool: breathing. Introduce pranayama concepts in a way that feels like a life hack, not a yoga class. Something they can do before an exam, during a fight with a friend, or when anxiety spikes at 2 AM."
+    },
+    {
+      "id": "identity_discovery",
+      "theme": "Who am I beyond my grades, my looks, and my social media profile?",
+      "context": "Teenagers are constructing their identity. Society labels them by marks, appearance, and popularity. Mindfulness invites them to explore who they are beneath all these labels — and to be okay with not having all the answers yet."
+    },
+    {
+      "id": "anger_management",
+      "theme": "When anger takes over — learning to pause before reacting",
+      "context": "Teenage emotions are intense. A rude comment, an unfair situation, or feeling misunderstood can trigger explosive reactions. The mindful pause — even 3 seconds — can change the trajectory of an interaction."
+    },
+    {
+      "id": "sleep_and_rest",
+      "theme": "Why your mind needs rest (and screens don't count)",
+      "context": "Many teenagers struggle with sleep, often staying up late on phones. The mind needs genuine rest. Introduce the concept of a wind-down practice — simple body scan or gratitude reflection before sleep."
+    },
+    {
+      "id": "parent_expectations",
+      "theme": "When parents don't understand you",
+      "context": "The generational gap can feel enormous. Parents mean well but sometimes their expectations feel suffocating. Mindfulness helps teenagers develop the inner calm to communicate their feelings without shutting down or lashing out."
+    },
+    {
+      "id": "self_compassion",
+      "theme": "Being kind to yourself when you mess up",
+      "context": "Teenagers are often their own harshest critics. Failed a test, said something embarrassing, made a mistake — the inner critic goes into overdrive. Self-compassion (from Stanford's CCT tradition) teaches that imperfection is part of being human."
+    },
+    {
+      "id": "body_image",
+      "theme": "Making peace with your changing body",
+      "context": "Bodies change rapidly during teenage years. Comparison, beauty standards, and peer comments can create deep insecurity. Mindfulness of the body — not as an object to judge but as a home to inhabit — can shift the relationship."
+    },
+    {
+      "id": "gratitude_practice",
+      "theme": "Finding 3 good things in a bad day",
+      "context": "Bad days feel all-consuming at this age. A simple gratitude practice — noticing 3 things that went okay, even tiny ones — rewires how we experience difficult days. It's not toxic positivity; it's balanced awareness."
+    },
+    {
+      "id": "peer_pressure",
+      "theme": "Saying no without losing friends",
+      "context": "Peer pressure to conform — in behaviour, appearance, substance use, or online trends — is immense. Mindfulness builds the inner strength to notice the pressure, check in with your own values, and respond from a place of authenticity rather than fear."
+    },
+    {
+      "id": "first_heartbreak",
+      "theme": "When your heart hurts for the first time",
+      "context": "First romantic disappointments are some of the most intense emotions teenagers experience. Rather than avoiding or numbing the pain, mindfulness teaches us to sit with difficult emotions, knowing they will pass, like waves."
+    },
+    {
+      "id": "nature_connection",
+      "theme": "10 minutes outside can change your entire day",
+      "context": "Nitesh is a nature lover and photographer. Spending time outdoors — without phones — is a natural mindfulness practice. Encourage teenagers to notice the sky, feel the breeze, listen to birds. Simple, powerful, free."
+    },
+    {
+      "id": "digital_detox",
+      "theme": "What happens when you put your phone down for an hour",
+      "context": "Not as a punishment but as an experiment. What do you notice? What feelings come up? The discomfort of boredom is actually a doorway to creativity and self-awareness."
+    },
+    {
+      "id": "morning_intention",
+      "theme": "Start your day with a Sankalpa (intention)",
+      "context": "Nitesh writes about Sankalpa — setting a daily intention. For teenagers, this could be as simple as: 'Today, I will be kind to myself when I make a mistake.' A small anchor that shapes the entire day."
+    },
+    {
+      "id": "listening_deeply",
+      "theme": "The lost art of really listening to someone",
+      "context": "In the age of divided attention, truly listening — without planning your response, without checking your phone — is a radical act of compassion. It deepens friendships and builds trust."
+    },
+    {
+      "id": "imperfection",
+      "theme": "You don't have to have it all figured out at 16",
+      "context": "Nitesh's theme of acceptance and non-judgment. Society pressures teenagers to have career plans, life goals, and clear direction. Mindfulness says: it's okay to not know. The journey of discovery IS the point."
+    },
+    {
+      "id": "movement_as_meditation",
+      "theme": "Your body already knows how to meditate (you just call it dancing)",
+      "context": "Meditation doesn't have to mean sitting still with eyes closed. Walking, dancing, running, stretching — any movement done with full attention becomes meditation. Meet teenagers where they are."
+    },
+    {
+      "id": "compassion_for_others",
+      "theme": "The bully might be hurting too",
+      "context": "From Stanford's Compassion Cultivation Training: understanding that everyone is fighting their own battle. This isn't about excusing bad behavior but about expanding our circle of understanding. Hurt people hurt people."
+    }
+  ]
+}

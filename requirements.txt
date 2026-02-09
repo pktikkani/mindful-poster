@@ -1,0 +1,14 @@
+anthropic
+fastapi
+uvicorn
+resend
+httpx
+python-dotenv
+apscheduler
+pydantic
+pydantic-settings
+jinja2
+itsdangerous
+Pillow
+sqlalchemy
+psycopg2-binary
