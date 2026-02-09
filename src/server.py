@@ -26,6 +26,7 @@ app = FastAPI(
     title="Mindful Poster — Approval Server",
     description="Approval workflow for The Mindful Initiative's Instagram content",
     version="1.0.0",
+    redirect_slashes=False,
 )
 
 
