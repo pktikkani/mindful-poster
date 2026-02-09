@@ -12,3 +12,4 @@ itsdangerous
 Pillow
 sqlalchemy
 psycopg2-binary
+python-multipart
