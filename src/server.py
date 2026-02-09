@@ -8,11 +8,13 @@ Endpoints:
 - GET /dashboard         — View recent posts and their statuses
 - POST /generate         — Trigger manual post generation (API key protected)
 """
+import os
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
-
+import json
 from .config import get_settings
 from .database import (
     get_post_by_token,
@@ -22,11 +24,20 @@ from .database import (
 )
 from .instagram import publish_post, InstagramPublishError
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start scheduler on startup, clean up on shutdown."""
+    if os.environ.get("ENABLE_SCHEDULER", "true").lower() == "true":
+        start_background_scheduler()
+    yield
+
+
 app = FastAPI(
     title="Mindful Poster — Approval Server",
     description="Approval workflow for The Mindful Initiative's Instagram content",
     version="1.0.0",
     redirect_slashes=False,
+    lifespan=lifespan,
 )
 
 
@@ -56,7 +67,6 @@ async def approve_post(token: str):
     # Mark as approved
     update_post_status(post["id"], PostStatus.APPROVED)
 
-    # Try to publish to Instagram
     # Try to publish to Instagram
     try:
         # Placeholder image for testing — replace with real image generation later
@@ -207,6 +217,12 @@ async def dashboard():
 
     rows = ""
     for p in posts:
+        try:
+            meta = json.loads(p.get("metadata", "{}") or "{}")
+            cost_inr = meta.get("cost_inr", "—")
+            cost_str = f"₹{cost_inr}" if cost_inr != "—" else "—"
+        except (json.JSONDecodeError, TypeError):
+            cost_str = "—"
         status_emoji = {
             "pending_approval": "🟡",
             "approved": "🟢",
@@ -222,6 +238,7 @@ async def dashboard():
             <td>{status_emoji} {p['status']}</td>
             <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{p['theme']}</td>
             <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{p['hook']}</td>
+            <td>{cost_str}</td>
             <td>{p['created_at'][:10]}</td>
             <td><a href="{base}/preview/{p['approval_token']}">Preview</a></td>
         </tr>"""
@@ -245,9 +262,9 @@ async def dashboard():
     <h1>🧘 Mindful Poster — Dashboard</h1>
     <table>
         <thead>
-            <tr><th>#</th><th>Status</th><th>Theme</th><th>Hook</th><th>Date</th><th>Preview</th></tr>
+            <tr><th>#</th><th>Status</th><th>Theme</th><th>Hook</th><th>Cost</th><th>Date</th><th>Preview</th></tr>
         </thead>
-        <tbody>{rows if rows else '<tr><td colspan="6" style="text-align:center; padding: 24px; color: #999;">No posts yet. Generate your first post!</td></tr>'}</tbody>
+        <tbody>{rows if rows else '<tr><td colspan="7" style="text-align:center; padding: 24px; color: #999;">No posts yet. Generate your first post!</td></tr>'}</tbody>
     </table>
 </body>
 </html>"""
@@ -316,7 +333,39 @@ def _result_page(title: str, message: str, color: str) -> str:
 
 # ─── Entry Point ─────────────────────────────────────────────────────────────
 
+def start_background_scheduler():
+    """Start the post generation scheduler in the background."""
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from .scheduler import daily_generate_and_email
+
+    settings = get_settings()
+    scheduler = BackgroundScheduler()
+
+    trigger = CronTrigger(
+        hour=settings.post_generation_hour,
+        minute=settings.post_generation_minute,
+        timezone=settings.timezone,
+    )
+
+    scheduler.add_job(
+        daily_generate_and_email,
+        trigger=trigger,
+        id="daily_post_generation",
+        name="Generate daily mindfulness post",
+        replace_existing=True,
+    )
+
+    scheduler.start()
+    print(
+        f"⏰ Background scheduler started! Posts at "
+        f"{settings.post_generation_hour:02d}:{settings.post_generation_minute:02d} "
+        f"({settings.timezone})"
+    )
+
+
 if __name__ == "__main__":
     settings = get_settings()
-    print(f"🧘 Mindful Poster server starting on port {settings.server_port}...")
-    uvicorn.run(app, host="0.0.0.0", port=settings.server_port)
+    port = int(os.environ.get("PORT", settings.server_port))
+    print(f"🧘 Mindful Poster server starting on port {port}...")
+    uvicorn.run(app, host="0.0.0.0", port=port)
