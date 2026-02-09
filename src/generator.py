@@ -36,21 +36,54 @@ def pick_theme() -> dict:
     return random.choice(available)
 
 
-def generate_post(theme: dict | None = None) -> dict:
+def generate_post(
+        theme: dict | None = None,
+        force_theme_id: str | None = None,
+        revision_of: dict | None = None,
+        feedback: str | None = None,
+) -> dict:
     """
     Generate a new Instagram post using Claude API.
-    
+
+    If revision_of and feedback are provided, Claude will improve the original post.
     Returns the post-data dict with all fields, plus the database post_id.
     """
     settings = get_settings()
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
     if theme is None:
-        theme = pick_theme()
+        if force_theme_id:
+            themes = load_themes()
+            theme = next((t for t in themes if t["id"] == force_theme_id), None)
+        if theme is None:
+            theme = pick_theme()
 
     prompt = CONTENT_GENERATION_PROMPT.format(
         theme=theme["theme"], context=theme["context"]
     )
+
+    # If this is a revision, append the original post and feedback
+    if revision_of and feedback:
+        prompt += f"""
+
+--- REVISION REQUEST ---
+
+Here is the previous version of the post that needs improvement:
+
+Hook: {revision_of.get('hook', '')}
+
+Caption:
+{revision_of.get('caption', '')}
+
+Hashtags: {revision_of.get('hashtags', '')}
+
+CTA: {revision_of.get('cta', '')}
+
+FEEDBACK FROM REVIEWER:
+"{feedback}"
+
+Please generate a completely revised version that addresses this feedback while keeping the same theme. Keep the same JSON format.
+"""
 
     response = client.messages.create(
         model="claude-sonnet-4-5-20250929",
@@ -62,9 +95,8 @@ def generate_post(theme: dict | None = None) -> dict:
     # Track token usage and cost
     input_tokens = response.usage.input_tokens
     output_tokens = response.usage.output_tokens
-    # Claude Sonnet 4.5 pricing: $3/MTok input, $15/MTok output
     cost_usd = (input_tokens * 3 / 1_000_000) + (output_tokens * 15 / 1_000_000)
-    cost_inr = cost_usd * 85  # Approximate USD to INR
+    cost_inr = cost_usd * 85
 
     usage_info = {
         "input_tokens": input_tokens,
@@ -75,10 +107,7 @@ def generate_post(theme: dict | None = None) -> dict:
     }
     print(f"💰 Cost: ${cost_usd:.6f} (₹{cost_inr:.4f}) | Tokens: {input_tokens} in / {output_tokens} out")
 
-    # Parse the JSON response
     raw_text = response.content[0].text.strip()
-
-    # Handle potential Markdown code fences
     if raw_text.startswith("```"):
         raw_text = raw_text.split("\n", 1)[1]
         if raw_text.endswith("```"):
@@ -86,11 +115,8 @@ def generate_post(theme: dict | None = None) -> dict:
 
     post_data = json.loads(raw_text)
 
-    # Generate a secure approval token
     approval_token = secrets.token_urlsafe(32)
 
-    # Store in database
-    # Store in a database
     post_id = create_post(
         theme_id=theme["id"],
         theme=theme["theme"],

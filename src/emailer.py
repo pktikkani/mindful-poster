@@ -29,6 +29,8 @@ def send_approval_email(post_data: dict) -> str:
     approve_url = f"{base}/approve/{token}"
     reject_url = f"{base}/reject/{token}"
     preview_url = f"{base}/preview/{token}"
+    revise_url = f"{base}/revise/{token}"
+
 
     # Render the email template
     template_str = TEMPLATE_PATH.read_text()
@@ -44,6 +46,8 @@ def send_approval_email(post_data: dict) -> str:
         approve_url=approve_url,
         reject_url=reject_url,
         preview_url=preview_url,
+        revise_url=revise_url,
+
     )
 
     # Send via Resend

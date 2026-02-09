@@ -120,6 +120,120 @@ async def reject_post(token: str):
         "#c62828",
     ))
 
+# ─── Feedback & Revision ─────────────────────────────────────────────────────
+
+@app.get("/revise/{token}")
+async def revise_form(token: str):
+    """Show a feedback form for the post."""
+    post = get_post_by_token(token)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    if post["status"] in (PostStatus.PUBLISHED, PostStatus.APPROVED):
+        return HTMLResponse(_result_page(
+            "Cannot Revise",
+            "This post has already been approved/published.",
+            "#f57c00",
+        ))
+
+    settings = get_settings()
+    base = settings.server_base_url.rstrip("/")
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revise Post — Mindful Poster</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, sans-serif; background: #f5f0eb; padding: 20px; }}
+        .container {{ max-width: 540px; margin: 0 auto; }}
+        h1 {{ color: #1a3a2a; font-size: 20px; text-align: center; margin-bottom: 8px; }}
+        .subtitle {{ text-align: center; color: #888; font-size: 13px; margin-bottom: 24px; }}
+        .original {{ background: white; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }}
+        .original h3 {{ font-size: 14px; color: #1a3a2a; margin-bottom: 8px; }}
+        .original .hook {{ font-style: italic; color: #555; font-size: 15px; margin-bottom: 12px; }}
+        .original .caption {{ font-size: 13px; color: #666; line-height: 1.6; white-space: pre-line; max-height: 150px; overflow-y: auto; }}
+        .feedback-form {{ background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }}
+        .feedback-form h3 {{ font-size: 14px; color: #1a3a2a; margin-bottom: 12px; }}
+        textarea {{ width: 100%; height: 120px; border: 2px solid #e0d8cf; border-radius: 8px; padding: 12px; font-family: inherit; font-size: 14px; resize: vertical; }}
+        textarea:focus {{ outline: none; border-color: #3a7a52; }}
+        .hint {{ font-size: 12px; color: #999; margin-top: 8px; margin-bottom: 16px; }}
+        .actions {{ display: flex; gap: 12px; }}
+        .btn {{ flex: 1; padding: 12px; border-radius: 8px; font-size: 14px; font-weight: 600; text-align: center; cursor: pointer; border: none; text-decoration: none; display: block; }}
+        .btn-revise {{ background: #1a3a2a; color: white; }}
+        .btn-revise:hover {{ background: #2a5a3a; }}
+        .btn-reject {{ background: #f5f0eb; color: #c62828; border: 1px solid #e0d8cf; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✏️ Revise This Post</h1>
+        <p class="subtitle">📌 {post['theme']}</p>
+
+        <div class="original">
+            <h3>Current Post</h3>
+            <p class="hook">"{post['hook']}"</p>
+            <p class="caption">{post['caption']}</p>
+        </div>
+
+        <div class="feedback-form">
+            <h3>Your Feedback for Claude</h3>
+            <form action="{base}/revise/{token}" method="post">
+                <textarea name="feedback" placeholder="e.g. Make it more relatable to exam stress. Less philosophical, more conversational. Add a breathing exercise at the end."></textarea>
+                <p class="hint">Be specific — Claude will regenerate the post based on your feedback while keeping the same theme.</p>
+                <div class="actions">
+                    <button type="submit" class="btn btn-revise">🔄 Regenerate Post</button>
+                    <a href="{base}/reject/{token}" class="btn btn-reject">🗑️ Just Reject</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>"""
+    return HTMLResponse(html)
+
+
+@app.post("/revise/{token}")
+async def revise_post(token: str, request: Request):
+    """Regenerate a post based on feedback."""
+    post = get_post_by_token(token)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    form = await request.form()
+    feedback = form.get("feedback", "").strip()
+
+    if not feedback:
+        return HTMLResponse(_result_page(
+            "No Feedback Provided",
+            "Please go back and enter your feedback.",
+            "#f57c00",
+        ))
+
+    # Mark old post as rejected with feedback
+    update_post_status(post["id"], PostStatus.REJECTED, rejection_reason=f"Revision requested: {feedback}")
+
+    # Regenerate with feedback
+    from .generator import generate_post
+    from .emailer import send_approval_email
+
+    post_data = generate_post(
+        force_theme_id=post["theme_id"],
+        revision_of=post,
+        feedback=feedback,
+    )
+    send_approval_email(post_data)
+
+    return HTMLResponse(_result_page(
+        "Revised Post Generated! ✏️",
+        f"Claude has regenerated the post based on your feedback:<br><br>"
+        f"<em>\"{feedback}\"</em><br><br>"
+        f"A new approval email has been sent. Check your inbox!",
+        "#1a3a2a",
+    ))
+
 
 # ─── Preview ─────────────────────────────────────────────────────────────────
 
