@@ -281,6 +281,7 @@ async def preview_post(token: str):
         .btn {{ display: inline-block; padding: 12px 32px; border-radius: 8px; font-size: 14px; font-weight: 600; text-decoration: none; margin: 4px; }}
         .btn-approve {{ background: #2e7d32; color: white; }}
         .btn-reject {{ background: #c62828; color: white; }}
+        .btn-revise {{ background: #f57c00; color: white; }}
     </style>
 </head>
 <body>
@@ -311,6 +312,7 @@ async def preview_post(token: str):
         {"" if post["status"] != PostStatus.PENDING_APPROVAL else f'''
         <div class="actions">
             <a href="{base}/approve/{token}" class="btn btn-approve">✅ Approve & Publish</a>
+            <a href="{base}/revise/{token}" class="btn btn-revise">✏️ Revise</a>
             <a href="{base}/reject/{token}" class="btn btn-reject">❌ Reject</a>
         </div>
         '''}
