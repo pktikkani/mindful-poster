@@ -1,6 +1,6 @@
-# 🧘 Mindful Poster — AI-Powered Social Media for The Mindful Initiative
+# 🧘 Mindful Poster — Automated mTeen Instagram Publishing
 
-An automated content pipeline that generates mindfulness posts for teenagers in **Nitesh Batra's** authentic voice, sends them for approval via email, and publishes approved posts to Instagram.
+An automated content pipeline that writes concise wellness posts for teenagers, creates a branded 4:5 visual with the **Mitra** mascot, sends the exact image and caption for approval, and publishes approved posts to `@mteenmindful`.
 
 Built by [Prag-Matic (Nubewired Software Technologies)](https://prag-matic.com) for [The Mindful Initiative](https://themindfulinitiative.com).
 
@@ -10,9 +10,9 @@ Built by [Prag-Matic (Nubewired Software Technologies)](https://prag-matic.com) 
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌───────────┐
-│  Scheduler   │────▶│ Claude API   │────▶│ Email with  │────▶│ Instagram │
-│  (Daily 7AM) │     │ (Sonnet 4.5) │     │ Approve/    │     │ Graph API │
-│              │     │              │     │ Reject)     │     │ (Publish) │
+│  Scheduler   │────▶│ Claude +     │────▶│ Email with  │────▶│ Instagram │
+│  (Daily 7AM) │     │ GPT Image 2  │     │ Approve/    │     │ Graph API │
+│              │     │ + Mitra      │     │ Revise      │     │ (Publish) │
 └─────────────┘     └──────────────┘     └─────┬───────┘     └───────────┘
                                                │
                                         Nitesh clicks
@@ -27,10 +27,11 @@ Built by [Prag-Matic (Nubewired Software Technologies)](https://prag-matic.com) 
 
 ## How It Works
 
-1. **Daily Generation**: A scheduled job (7 AM IST) triggers Claude API to generate an Instagram post about mindfulness for teenagers, written in Nitesh's storytelling style.
-2. **Email for Review**: The generated post is emailed to Nitesh with a preview, along with **Approve** and **Reject** buttons.
-3. **Approval Webhook**: When Nitesh clicks "Approve", the FastAPI server receives the request and triggers Instagram publishing.
-4. **Instagram Publishing**: The approved post is published via Instagram Graph API.
+1. **Daily Generation**: Claude generates a short, visual-first mTeen headline, list, caption, CTA, and safe background direction.
+2. **Branded Visual**: GPT Image 2 creates a topic-specific background. Pillow adds exact typography and the original Mitra PNG, producing a 1080×1350 JPEG.
+3. **Durable Storage**: The exact image is stored in SQLite/Postgres and served through a public, tokenized media URL.
+4. **Email Review**: The image and caption are emailed with **Approve**, **Revise**, and **Reject** actions.
+5. **Instagram Publishing**: Approval publishes that exact reviewed image and caption through Instagram Graph API.
 
 ## Cost
 
@@ -45,6 +46,8 @@ Built by [Prag-Matic (Nubewired Software Technologies)](https://prag-matic.com) 
 - **Python 3.11+**
 - **FastAPI** — Webhook server for approval/rejection
 - **Anthropic SDK** — Content generation via Claude Sonnet 4.5
+- **OpenAI Image API** — Topic-specific backgrounds via GPT Image 2
+- **Pillow** — Deterministic typography and exact Mitra compositing
 - **Resend** — Transactional emails
 - **Instagram Graph API** — Publishing to Instagram
 - **SQLite** — Lightweight post tracking database
@@ -58,6 +61,7 @@ Built by [Prag-Matic (Nubewired Software Technologies)](https://prag-matic.com) 
 
 You'll need accounts and API keys for:
 - **Anthropic API** → https://console.anthropic.com
+- **OpenAI API** → https://platform.openai.com
 - **Resend** → https://resend.com
 - **Instagram Graph API** → Requires Facebook Developer account + Instagram Professional account
 
@@ -192,6 +196,11 @@ APPROVAL_EMAIL=recipient@example.com
 INSTAGRAM_ACCESS_TOKEN=your_instagram_token
 INSTAGRAM_ACCOUNT_ID=your_instagram_account_id
 
+# OpenAI branded background generation
+OPENAI_API_KEY=sk-proj-xxxxx
+OPENAI_IMAGE_MODEL=gpt-image-2
+OPENAI_IMAGE_QUALITY=medium
+
 # Server
 SERVER_BASE_URL=http://localhost:8000
 SERVER_PORT=8000
@@ -275,13 +284,17 @@ mindful-poster/
 ├── src/
 │   ├── __init__.py          # Package init
 │   ├── config.py            # Environment config (pydantic-settings)
+│   ├── content.py           # Typed mTeen post contract and validation
 │   ├── database.py          # SQLite database operations
-│   ├── generator.py         # Claude API content generation + cost tracking
+│   ├── generator.py         # Claude content + branded visual orchestration
+│   ├── image_generator.py   # GPT Image background + Mitra compositor
 │   ├── emailer.py           # Resend email with approval links
 │   ├── instagram.py         # Instagram Graph API publisher
 │   ├── server.py            # FastAPI webhook server + dashboard
 │   ├── scheduler.py         # APScheduler for daily generation
-│   └── style_guide.py       # Nitesh's writing style prompt
+│   └── style_guide.py       # mTeen short-form editorial prompt
+├── assets/
+│   └── mitra.png            # Exact transparent mascot asset
 ├── templates/
 │   └── approval_email.html  # Email template (Jinja2)
 ├── config/
@@ -346,7 +359,6 @@ These are IDE warnings, not real errors:
 
 ## Future Enhancements
 
-- [ ] AI image generation (DALL-E / Stability AI) for each post
 - [ ] Automatic Instagram token refresh before expiry
 - [ ] Multi-platform support (LinkedIn, Twitter/X)
 - [ ] A/B testing of post variations

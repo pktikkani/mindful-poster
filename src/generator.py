@@ -1,4 +1,4 @@
-"""Content generator using Claude API to create posts in Nitesh's voice."""
+"""Generate concise mTeen content and its exact branded Instagram visual."""
 
 import json
 import random
@@ -9,9 +9,10 @@ import anthropic
 from anthropic.types import MessageParam
 
 from .config import get_settings
-from .style_guide import NITESH_STYLE_SYSTEM_PROMPT, CONTENT_GENERATION_PROMPT
-from .database import create_post, get_used_theme_ids
-
+from .content import PostContent
+from .database import create_post, get_used_theme_ids, save_post_image
+from .image_generator import generate_post_visual
+from .style_guide import CONTENT_GENERATION_PROMPT, MTEEN_STYLE_SYSTEM_PROMPT
 
 THEMES_PATH = Path(__file__).parent.parent / "config" / "content_themes.json"
 
@@ -49,6 +50,8 @@ def generate_post(
     Returns the post-data dict with all fields, plus the database post_id.
     """
     settings = get_settings()
+    if not settings.anthropic_api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY is not configured")
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
     if theme is None:
@@ -88,7 +91,7 @@ Please generate a completely revised version that addresses this feedback while 
     response = client.messages.create(
         model="claude-sonnet-4-5-20250929",
         max_tokens=1500,
-        system=NITESH_STYLE_SYSTEM_PROMPT,
+        system=MTEEN_STYLE_SYSTEM_PROMPT,
         messages=[MessageParam(role="user", content=prompt)],
     )
 
@@ -113,9 +116,19 @@ Please generate a completely revised version that addresses this feedback while 
         if raw_text.endswith("```"):
             raw_text = raw_text[:-3].strip()
 
-    post_data = json.loads(raw_text)
+    post_content = PostContent.model_validate_json(raw_text)
+    post_data = post_content.model_dump()
 
     approval_token = secrets.token_urlsafe(32)
+
+    # Generate before inserting so an image failure cannot leave an approvable,
+    # image-less post behind.
+    visual = generate_post_visual(post_content)
+    metadata = {
+        **usage_info,
+        **visual.metadata,
+        "items": post_content.items,
+    }
 
     post_id = create_post(
         theme_id=theme["id"],
@@ -127,13 +140,19 @@ Please generate a completely revised version that addresses this feedback while 
         image_prompt=post_data.get("image_prompt", ""),
         cta=post_data.get("cta", ""),
         approval_token=approval_token,
-        metadata=json.dumps(usage_info),
+        metadata=json.dumps(metadata),
+    )
+    save_post_image(post_id, visual.image_bytes, visual.mime_type)
+
+    image_url = (
+        f"{settings.server_base_url.rstrip('/')}/media/{approval_token}"
     )
 
     return {
         "post_id": post_id,
         "approval_token": approval_token,
         "cost": usage_info,
+        "image_url": image_url,
         **post_data,
     }
 
@@ -152,6 +171,6 @@ if __name__ == "__main__":
         print(f"📝 Caption:\n{post.get('caption', 'N/A')}\n")
         print(f"#️⃣  Hashtags: {post.get('hashtags', 'N/A')}\n")
         print(f"🖼️  Image idea: {post.get('image_prompt', 'N/A')}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - CLI boundary reports any pipeline failure
         print(f"❌ Error generating post: {e}", file=sys.stderr)
         sys.exit(1)

@@ -5,15 +5,25 @@ Set DATABASE_URL in .env to use Postgres:
 
 Leave DATABASE_URL empty to use local SQLite (data/posts.db).
 """
-from dotenv import load_dotenv
-load_dotenv()
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, select
-from sqlalchemy.orm import sessionmaker, declarative_base
+from dotenv import load_dotenv
+from sqlalchemy import (
+    Column,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    create_engine,
+    select,
+)
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+load_dotenv()
 
 # ─── Post Status Enum ────────────────────────────────────────────────────────
 
@@ -75,6 +85,18 @@ class Post(Base):
     instagram_post_id = Column(String, nullable=True)
     rejection_reason = Column(Text, nullable=True)
     metadata_ = Column("metadata", Text, default="{}")
+
+
+class PostImage(Base):
+    """The exact approved visual served to Instagram and approval previews."""
+
+    __tablename__ = "post_images"
+
+    id = Column(Integer, primary_key=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False, unique=True, index=True)
+    image_data = Column(LargeBinary, nullable=False)
+    mime_type = Column(String, nullable=False, default="image/jpeg")
+    created_at = Column(String, nullable=False)
 
 
 # Create tables on import
@@ -212,6 +234,45 @@ def update_post_metadata(post_id: int, metadata: str):
         if post:
             post.metadata_ = metadata
             db.commit()
+    finally:
+        db.close()
+
+
+def save_post_image(post_id: int, image_data: bytes, mime_type: str = "image/jpeg"):
+    """Persist or replace a post visual without relying on ephemeral disk storage."""
+    db = SessionLocal()
+    try:
+        post_image = db.execute(
+            select(PostImage).filter(PostImage.post_id == post_id)
+        ).scalar_one_or_none()
+        if post_image:
+            post_image.image_data = image_data
+            post_image.mime_type = mime_type
+            post_image.created_at = datetime.now(timezone.utc).isoformat()
+        else:
+            db.add(PostImage(
+                post_id=post_id,
+                image_data=image_data,
+                mime_type=mime_type,
+                created_at=datetime.now(timezone.utc).isoformat(),
+            ))
+        db.commit()
+    finally:
+        db.close()
+
+
+def get_post_image_by_token(token: str) -> dict | None:
+    """Return the generated image associated with an approval token."""
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            select(PostImage)
+            .join(Post, Post.id == PostImage.post_id)
+            .filter(Post.approval_token == token)
+        ).scalar_one_or_none()
+        if not row:
+            return None
+        return {"image_data": row.image_data, "mime_type": row.mime_type}
     finally:
         db.close()
 

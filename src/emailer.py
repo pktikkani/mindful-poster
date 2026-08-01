@@ -21,6 +21,8 @@ def send_approval_email(post_data: dict) -> str:
         The Resend email ID
     """
     settings = get_settings()
+    if not settings.resend_api_key:
+        raise RuntimeError("RESEND_API_KEY is not configured")
     resend.api_key = settings.resend_api_key
 
     # Build approval/reject URLs
@@ -30,7 +32,7 @@ def send_approval_email(post_data: dict) -> str:
     reject_url = f"{base}/reject/{token}"
     preview_url = f"{base}/preview/{token}"
     revise_url = f"{base}/revise/{token}"
-
+    image_url = post_data.get("image_url") or f"{base}/media/{token}"
 
     # Render the email template
     template_str = TEMPLATE_PATH.read_text()
@@ -47,7 +49,7 @@ def send_approval_email(post_data: dict) -> str:
         reject_url=reject_url,
         preview_url=preview_url,
         revise_url=revise_url,
-
+        image_url=image_url,
     )
 
     # Send via Resend

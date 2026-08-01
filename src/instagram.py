@@ -11,7 +11,6 @@ GRAPH_API_BASE = "https://graph.instagram.com/v24.0"
 
 class InstagramPublishError(Exception):
     """Raised when Instagram publishing fails."""
-    pass
 
 
 def publish_post(caption: str, hashtags: str, image_url: str | None = None) -> str:
@@ -50,49 +49,50 @@ def publish_post(caption: str, hashtags: str, image_url: str | None = None) -> s
     account_id = settings.instagram_account_id
     token = settings.instagram_access_token
 
-    # Step 1: Create a media container
-    container_url = f"{GRAPH_API_BASE}/{account_id}/media"
-    container_payload = {
-        "image_url": image_url,
-        "caption": full_caption,
-        "access_token": token,
-    }
-
-    with httpx.Client(timeout=30) as client:
-        resp = client.post(container_url, data=container_payload)
-        resp.raise_for_status()
-        container_data = resp.json()
-
-        if "id" not in container_data:
-            raise InstagramPublishError(
-                f"Failed to create media container: {container_data}"
-            )
-
-        container_id = container_data["id"]
-        print(f"📦 Media container created: {container_id}")
-
-        # Step 2: Wait for container to be ready (Instagram processes the image)
-        _wait_for_container(client, container_id, token)
-
-        # Step 3: Publish the container
-        publish_url = f"{GRAPH_API_BASE}/{account_id}/media_publish"
-        publish_payload = {
-            "creation_id": container_id,
+    try:
+        # Step 1: Create a media container
+        container_url = f"{GRAPH_API_BASE}/{account_id}/media"
+        container_payload = {
+            "image_url": image_url,
+            "caption": full_caption,
             "access_token": token,
         }
 
-        resp = client.post(publish_url, data=publish_payload)
-        resp.raise_for_status()
-        publish_data = resp.json()
+        with httpx.Client(timeout=30) as client:
+            resp = client.post(container_url, data=container_payload)
+            _ensure_success(resp, "creating the Instagram media container")
+            container_data = resp.json()
 
-        if "id" not in publish_data:
-            raise InstagramPublishError(
-                f"Failed to publish post: {publish_data}"
-            )
+            if "id" not in container_data:
+                raise InstagramPublishError("Instagram returned no media container ID")
 
-        post_id = publish_data["id"]
-        print(f"✅ Published to Instagram! Post ID: {post_id}")
-        return post_id
+            container_id = container_data["id"]
+            print(f"📦 Media container created: {container_id}")
+
+            # Step 2: Wait for container to be ready (Instagram processes the image)
+            _wait_for_container(client, container_id, token)
+
+            # Step 3: Publish the container
+            publish_url = f"{GRAPH_API_BASE}/{account_id}/media_publish"
+            publish_payload = {
+                "creation_id": container_id,
+                "access_token": token,
+            }
+
+            resp = client.post(publish_url, data=publish_payload)
+            _ensure_success(resp, "publishing the Instagram media container")
+            publish_data = resp.json()
+
+            if "id" not in publish_data:
+                raise InstagramPublishError("Instagram returned no published post ID")
+
+            post_id = publish_data["id"]
+            print(f"✅ Published to Instagram! Post ID: {post_id}")
+            return post_id
+    except InstagramPublishError:
+        raise
+    except httpx.HTTPError as exc:
+        raise InstagramPublishError("Instagram API request failed") from exc
 
 
 def _wait_for_container(
@@ -104,6 +104,7 @@ def _wait_for_container(
             f"{GRAPH_API_BASE}/{container_id}",
             params={"fields": "status_code", "access_token": token},
         )
+        _ensure_success(resp, "checking Instagram media processing")
         data = resp.json()
         status = data.get("status_code")
 
@@ -118,6 +119,18 @@ def _wait_for_container(
         time.sleep(3)
 
     raise InstagramPublishError("Media processing timed out")
+
+
+def _ensure_success(response: httpx.Response, action: str):
+    """Raise a safe error that never includes the access token or request URL."""
+    if response.is_success:
+        return
+    try:
+        message = response.json().get("error", {}).get("message")
+    except ValueError:
+        message = None
+    detail = message or f"HTTP {response.status_code}"
+    raise InstagramPublishError(f"Instagram failed while {action}: {detail}")
 
 
 def validate_credentials() -> bool:
@@ -143,6 +156,6 @@ def validate_credentials() -> bool:
             else:
                 print(f"❌ Instagram validation failed: {data}")
                 return False
-    except Exception as e:
+    except (httpx.HTTPError, ValueError) as e:
         print(f"❌ Instagram validation error: {e}")
         return False

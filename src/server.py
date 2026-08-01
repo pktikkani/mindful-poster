@@ -8,21 +8,24 @@ Endpoints:
 - GET /dashboard         — View recent posts and their statuses
 - POST /generate         — Trigger manual post generation (API key protected)
 """
+import json
 import os
 from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
-import json
+from fastapi.responses import HTMLResponse, Response
+
 from .config import get_settings
 from .database import (
+    PostStatus,
     get_post_by_token,
+    get_post_image_by_token,
     get_recent_posts,
     update_post_status,
-    PostStatus,
 )
-from .instagram import publish_post, InstagramPublishError
+from .instagram import InstagramPublishError, publish_post
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -45,6 +48,24 @@ app = FastAPI(
 
 @app.get("/approve/{token}")
 async def approve_post(token: str):
+    """Show a safe confirmation page; GET never publishes."""
+    post = get_post_by_token(token)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    settings = get_settings()
+    image_url = f"{settings.server_base_url.rstrip('/')}/media/{token}"
+    return HTMLResponse(_confirmation_page(
+        title="Publish this post?",
+        message="This will publish the reviewed image and caption to @mteenmindful.",
+        action=f"/approve/{token}",
+        button_label="Publish to Instagram",
+        button_color="#2e7d32",
+        image_url=image_url if get_post_image_by_token(token) else None,
+    ))
+
+
+@app.post("/approve/{token}")
+async def publish_approved_post(token: str):
     """Approve a post and trigger Instagram publishing."""
     post = get_post_by_token(token)
     if not post:
@@ -64,18 +85,26 @@ async def approve_post(token: str):
             "#f57c00",
         ))
 
-    # Mark as approved
+    post_image = get_post_image_by_token(token)
+    if not post_image:
+        return HTMLResponse(_result_page(
+            "Generated Image Missing",
+            "This legacy post has no Mitra visual. Please revise it to generate a new image before approval.",
+            "#f57c00",
+        ), status_code=409)
+
+    # Mark as approved only after the exact image is known to exist.
     update_post_status(post["id"], PostStatus.APPROVED)
 
     # Try to publish to Instagram
     try:
-        # Placeholder image for testing — replace with real image generation later
-        placeholder_image = "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=1080&q=80"
+        settings = get_settings()
+        image_url = f"{settings.server_base_url.rstrip('/')}/media/{token}"
 
         instagram_post_id = publish_post(
             caption=post["caption"],
             hashtags=post["hashtags"],
-            image_url=placeholder_image,
+            image_url=image_url,
         )
         update_post_status(post["id"], PostStatus.PUBLISHED, instagram_post_id=instagram_post_id)
 
@@ -100,6 +129,21 @@ async def approve_post(token: str):
 
 @app.get("/reject/{token}")
 async def reject_post(token: str):
+    """Show a safe confirmation page; GET never rejects."""
+    post = get_post_by_token(token)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return HTMLResponse(_confirmation_page(
+        title="Reject this post?",
+        message="The post will remain in the dashboard with rejected status.",
+        action=f"/reject/{token}",
+        button_label="Reject Post",
+        button_color="#c62828",
+    ))
+
+
+@app.post("/reject/{token}")
+async def confirm_reject_post(token: str):
     """Reject a post."""
     post = get_post_by_token(token)
     if not post:
@@ -216,8 +260,8 @@ async def revise_post(token: str, request: Request):
     update_post_status(post["id"], PostStatus.REJECTED, rejection_reason=f"Revision requested: {feedback}")
 
     # Regenerate with feedback
-    from .generator import generate_post
     from .emailer import send_approval_email
+    from .generator import generate_post
 
     post_data = generate_post(
         force_theme_id=post["theme_id"],
@@ -237,6 +281,18 @@ async def revise_post(token: str, request: Request):
 
 # ─── Preview ─────────────────────────────────────────────────────────────────
 
+@app.get("/media/{token}")
+async def post_media(token: str):
+    """Serve the exact generated image from durable database storage."""
+    post_image = get_post_image_by_token(token)
+    if not post_image:
+        raise HTTPException(status_code=404, detail="Post image not found")
+    return Response(
+        content=post_image["image_data"],
+        media_type=post_image["mime_type"],
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
 @app.get("/preview/{token}")
 async def preview_post(token: str):
     """Preview a post in the browser (Instagram card style)."""
@@ -246,6 +302,14 @@ async def preview_post(token: str):
 
     settings = get_settings()
     base = settings.server_base_url.rstrip("/")
+    has_image = get_post_image_by_token(token) is not None
+    image_preview = (
+        f'<img src="{base}/media/{token}" alt="{post["alt_text"]}" '
+        'style="display:block; width:100%; height:auto;">'
+        if has_image else
+        f'<div class="card-image"><p>"{post["hook"]}"</p>'
+        f'<p class="suggestion">Legacy post: revise to generate a Mitra visual.</p></div>'
+    )
 
     status_badge = {
         PostStatus.PENDING_APPROVAL: ("🟡 Pending Review", "#f57c00"),
@@ -293,11 +357,8 @@ async def preview_post(token: str):
         </div>
         
         <div class="card">
-            <div class="card-header">@themindfulinitiative</div>
-            <div class="card-image">
-                <p>"{post['hook']}"</p>
-                <p class="suggestion">🖼️ {post['image_prompt']}</p>
-            </div>
+            <div class="card-header">@mteenmindful</div>
+            {image_preview}
             <div class="card-body">
                 <p class="caption">{post['caption']}</p>
                 <p class="hashtags">{post['hashtags']}</p>
@@ -398,8 +459,8 @@ async def trigger_generation(request: Request):
     if auth != f"Bearer {settings.secret_key}":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    from .generator import generate_post
     from .emailer import send_approval_email
+    from .generator import generate_post
 
     post_data = generate_post()
     send_approval_email(post_data)
@@ -447,12 +508,39 @@ def _result_page(title: str, message: str, color: str) -> str:
 </html>"""
 
 
+def _confirmation_page(
+    title: str,
+    message: str,
+    action: str,
+    button_label: str,
+    button_color: str,
+    image_url: str | None = None,
+) -> str:
+    """Require a form submission before a publishing or rejection side effect."""
+    image = (
+        f'<img src="{image_url}" alt="Post preview" '
+        'style="width:100%; border-radius:12px; margin:20px 0;">'
+        if image_url else ""
+    )
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title} — Mindful Poster</title></head>
+<body style="font-family:-apple-system,sans-serif;background:#f5f0eb;padding:24px;">
+<main style="max-width:480px;margin:auto;background:white;padding:28px;border-radius:16px;text-align:center;">
+<h1 style="color:#2d2048;">{title}</h1><p style="color:#555;line-height:1.6;">{message}</p>{image}
+<form method="post" action="{action}">
+<button type="submit" style="border:0;border-radius:8px;padding:14px 28px;background:{button_color};color:white;font-size:16px;font-weight:700;cursor:pointer;">{button_label}</button>
+</form><p><a href="/dashboard" style="color:#666;">Cancel</a></p>
+</main></body></html>"""
+
+
 # ─── Entry Point ─────────────────────────────────────────────────────────────
 
 def start_background_scheduler():
     """Start the post generation scheduler in the background."""
     from apscheduler.schedulers.background import BackgroundScheduler
     from apscheduler.triggers.cron import CronTrigger
+
     from .scheduler import daily_generate_and_email
 
     settings = get_settings()
