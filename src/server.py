@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from .config import get_settings
 from .database import (
@@ -25,6 +25,7 @@ from .database import (
     update_post_status,
 )
 from .instagram import InstagramPublishError, publish_post
+from .media import public_image_url
 
 
 @asynccontextmanager
@@ -53,7 +54,7 @@ async def approve_post(token: str):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     settings = get_settings()
-    image_url = f"{settings.server_base_url.rstrip('/')}/media/{token}"
+    image_url = public_image_url(settings.server_base_url, token)
     return HTMLResponse(_confirmation_page(
         title="Publish this post?",
         message="This will publish the reviewed image and caption to @mteenmindful.",
@@ -99,7 +100,7 @@ async def publish_approved_post(token: str):
     # Try to publish to Instagram
     try:
         settings = get_settings()
-        image_url = f"{settings.server_base_url.rstrip('/')}/media/{token}"
+        image_url = public_image_url(settings.server_base_url, token)
 
         instagram_post_id = publish_post(
             caption=post["caption"],
@@ -281,8 +282,7 @@ async def revise_post(token: str, request: Request):
 
 # ─── Preview ─────────────────────────────────────────────────────────────────
 
-@app.get("/media/{token}")
-async def post_media(token: str):
+def _post_media_response(token: str) -> Response:
     """Serve the exact generated image from durable database storage."""
     post_image = get_post_image_by_token(token)
     if not post_image:
@@ -290,8 +290,30 @@ async def post_media(token: str):
     return Response(
         content=post_image["image_data"],
         media_type=post_image["mime_type"],
-        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Content-Disposition": 'inline; filename="mteen-post.jpg"',
+            "X-Content-Type-Options": "nosniff",
+        },
     )
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+async def robots_txt():
+    """Explicitly allow Meta's crawler to fetch generated post media."""
+    return "User-agent: *\nAllow: /media/\n"
+
+
+@app.get("/media/{token}.jpg")
+async def post_media_jpeg(token: str):
+    """Serve generated media at an explicit JPEG URL for Instagram."""
+    return _post_media_response(token)
+
+
+@app.get("/media/{token}")
+async def post_media(token: str):
+    """Keep previously emailed extensionless media URLs working."""
+    return _post_media_response(token)
 
 @app.get("/preview/{token}")
 async def preview_post(token: str):
@@ -304,7 +326,7 @@ async def preview_post(token: str):
     base = settings.server_base_url.rstrip("/")
     has_image = get_post_image_by_token(token) is not None
     image_preview = (
-        f'<img src="{base}/media/{token}" alt="{post["alt_text"]}" '
+        f'<img src="{public_image_url(base, token)}" alt="{post["alt_text"]}" '
         'style="display:block; width:100%; height:auto;">'
         if has_image else
         f'<div class="card-image"><p>"{post["hook"]}"</p>'

@@ -12,6 +12,7 @@ from .config import get_settings
 from .content import PostContent
 from .database import create_post, get_used_theme_ids, save_post_image
 from .image_generator import generate_post_visual
+from .media import public_image_url
 from .style_guide import CONTENT_GENERATION_PROMPT, MTEEN_STYLE_SYSTEM_PROMPT
 
 THEMES_PATH = Path(__file__).parent.parent / "config" / "content_themes.json"
@@ -144,9 +145,7 @@ Please generate a completely revised version that addresses this feedback while 
     )
     save_post_image(post_id, visual.image_bytes, visual.mime_type)
 
-    image_url = (
-        f"{settings.server_base_url.rstrip('/')}/media/{approval_token}"
-    )
+    image_url = public_image_url(settings.server_base_url, approval_token)
 
     return {
         "post_id": post_id,

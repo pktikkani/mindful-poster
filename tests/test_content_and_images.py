@@ -96,6 +96,7 @@ class GenerationPipelineTests(unittest.TestCase):
 
         self.assertEqual(123, result["post_id"])
         self.assertTrue(result["image_url"].startswith("https://mindful.example/media/"))
+        self.assertTrue(result["image_url"].endswith(".jpg"))
         save_image.assert_called_once_with(123, b"generated-jpeg", "image/jpeg")
 
 
@@ -105,12 +106,24 @@ class MediaEndpointTests(unittest.TestCase):
         with patch(
             "src.server.get_post_image_by_token",
             return_value={"image_data": payload, "mime_type": "image/jpeg"},
-        ):
-            response = TestClient(app).get("/media/safe-token")
+        ) as image_lookup:
+            response = TestClient(app).get("/media/safe-token.jpg")
 
         self.assertEqual(200, response.status_code)
         self.assertEqual("image/jpeg", response.headers["content-type"])
+        self.assertEqual(
+            'inline; filename="mteen-post.jpg"',
+            response.headers["content-disposition"],
+        )
         self.assertEqual(payload, response.content)
+        image_lookup.assert_called_once_with("safe-token")
+
+    def test_robots_allows_meta_to_fetch_post_media(self):
+        response = TestClient(app).get("/robots.txt")
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("text/plain; charset=utf-8", response.headers["content-type"])
+        self.assertIn("Allow: /media/", response.text)
 
     def test_opening_approval_link_never_publishes(self):
         post = {"id": 42, "status": "pending_approval"}

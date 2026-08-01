@@ -6,6 +6,7 @@ import resend
 from jinja2 import Template
 
 from .config import get_settings
+from .media import public_image_url
 
 TEMPLATE_PATH = Path(__file__).parent.parent / "templates" / "approval_email.html"
 
@@ -32,7 +33,7 @@ def send_approval_email(post_data: dict) -> str:
     reject_url = f"{base}/reject/{token}"
     preview_url = f"{base}/preview/{token}"
     revise_url = f"{base}/revise/{token}"
-    image_url = post_data.get("image_url") or f"{base}/media/{token}"
+    image_url = post_data.get("image_url") or public_image_url(base, token)
 
     # Render the email template
     template_str = TEMPLATE_PATH.read_text()
