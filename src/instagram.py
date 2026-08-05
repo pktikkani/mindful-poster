@@ -95,6 +95,72 @@ def publish_post(caption: str, hashtags: str, image_url: str | None = None) -> s
         raise InstagramPublishError("Instagram API request failed") from exc
 
 
+def publish_story(image_url: str) -> str:
+    """
+    Publish an image story via Graph API.
+
+    Stories have no caption; image_url must be publicly fetchable by Meta.
+
+    Returns:
+        The Instagram story media ID
+
+    Raises:
+        InstagramPublishError: If publishing fails
+    """
+    settings = get_settings()
+
+    if not settings.instagram_access_token or not settings.instagram_account_id:
+        raise InstagramPublishError(
+            "Instagram credentials not configured. "
+            "Set INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_ACCOUNT_ID in .env"
+        )
+
+    account_id = settings.instagram_account_id
+    token = settings.instagram_access_token
+
+    try:
+        container_url = f"{GRAPH_API_BASE}/{account_id}/media"
+        container_payload = {
+            "media_type": "STORIES",
+            "image_url": image_url,
+            "access_token": token,
+        }
+
+        with httpx.Client(timeout=30) as client:
+            resp = client.post(container_url, data=container_payload)
+            _ensure_success(resp, "creating the Instagram story container")
+            container_data = resp.json()
+
+            if "id" not in container_data:
+                raise InstagramPublishError("Instagram returned no story container ID")
+
+            container_id = container_data["id"]
+            print(f"📦 Story container created: {container_id}")
+
+            _wait_for_container(client, container_id, token)
+
+            publish_url = f"{GRAPH_API_BASE}/{account_id}/media_publish"
+            publish_payload = {
+                "creation_id": container_id,
+                "access_token": token,
+            }
+
+            resp = client.post(publish_url, data=publish_payload)
+            _ensure_success(resp, "publishing the Instagram story")
+            publish_data = resp.json()
+
+            if "id" not in publish_data:
+                raise InstagramPublishError("Instagram returned no published story ID")
+
+            story_id = publish_data["id"]
+            print(f"✅ Story published! ID: {story_id}")
+            return story_id
+    except InstagramPublishError:
+        raise
+    except httpx.HTTPError as exc:
+        raise InstagramPublishError("Instagram API request failed") from exc
+
+
 def _wait_for_container(
     client: httpx.Client, container_id: str, token: str, max_attempts: int = 10
 ):

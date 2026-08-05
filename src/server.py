@@ -24,8 +24,8 @@ from .database import (
     get_recent_posts,
     update_post_status,
 )
-from .instagram import InstagramPublishError, publish_post
-from .media import public_image_url
+from .instagram import InstagramPublishError, publish_post, publish_story
+from .media import MediaUploadError, is_meta_blocked_host, public_image_url, upload_for_meta
 
 
 @asynccontextmanager
@@ -100,7 +100,10 @@ async def publish_approved_post(token: str):
     # Try to publish to Instagram
     try:
         settings = get_settings()
-        image_url = public_image_url(settings.server_base_url, token)
+        if is_meta_blocked_host(settings.server_base_url):
+            image_url = upload_for_meta(post_image["image_data"], post_image["mime_type"])
+        else:
+            image_url = public_image_url(settings.server_base_url, token)
 
         instagram_post_id = publish_post(
             caption=post["caption"],
@@ -109,15 +112,26 @@ async def publish_approved_post(token: str):
         )
         update_post_status(post["id"], PostStatus.PUBLISHED, instagram_post_id=instagram_post_id)
 
+        # Story failure must not undo a live feed post — report it instead.
+        try:
+            from .image_generator import compose_story_card
+            story_bytes = compose_story_card(post_image["image_data"])
+            story_url = upload_for_meta(story_bytes)
+            story_id = publish_story(story_url)
+            story_note = f"<em>Story ID: {story_id}</em>"
+        except (InstagramPublishError, MediaUploadError) as story_error:
+            story_note = f"<em>Feed post is live, but the story failed: {story_error}</em>"
+
         return HTMLResponse(_result_page(
             "Post Published! 🧘",
             f"The post has been approved and published to Instagram!<br><br>"
             f"<em>Theme: {post['theme']}</em><br>"
-            f"<em>Instagram Post ID: {instagram_post_id}</em>",
+            f"<em>Instagram Post ID: {instagram_post_id}</em><br>"
+            f"{story_note}",
             "#2e7d32",
         ))
 
-    except InstagramPublishError as e:
+    except (InstagramPublishError, MediaUploadError) as e:
         update_post_status(post["id"], PostStatus.FAILED)
         return HTMLResponse(_result_page(
             "Publishing Failed ❌",

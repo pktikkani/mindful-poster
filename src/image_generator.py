@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
-from PIL import Image, ImageDraw, ImageEnhance, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 from .config import get_settings
 from .content import PostContent
@@ -16,6 +16,7 @@ OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations"
 ROOT = Path(__file__).parent.parent
 MASCOT_PATH = ROOT / "assets" / "mitra.png"
 CANVAS_SIZE = (1080, 1350)
+STORY_SIZE = (1080, 1920)
 API_IMAGE_SIZE = "1024x1280"
 
 
@@ -142,6 +143,20 @@ def compose_post_card(content: PostContent, background_bytes: bytes) -> bytes:
 
     output = io.BytesIO()
     canvas.convert("RGB").save(output, format="JPEG", quality=92, optimize=True)
+    return output.getvalue()
+
+
+def compose_story_card(post_image_bytes: bytes) -> bytes:
+    """Derive a 9:16 story image from the exact approved post card — no new generation."""
+    post_img = Image.open(io.BytesIO(post_image_bytes)).convert("RGB")
+    backdrop = _cover(post_img, STORY_SIZE).filter(ImageFilter.GaussianBlur(40))
+    backdrop = ImageEnhance.Brightness(backdrop).enhance(0.75)
+    left = (STORY_SIZE[0] - post_img.width) // 2
+    top = (STORY_SIZE[1] - post_img.height) // 2
+    backdrop.paste(post_img, (left, top))
+
+    output = io.BytesIO()
+    backdrop.save(output, format="JPEG", quality=92, optimize=True)
     return output.getvalue()
 
 
