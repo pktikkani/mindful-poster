@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     create_engine,
     select,
+    text,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -81,6 +82,7 @@ class Post(Base):
     approval_token = Column(String, unique=True)
     created_at = Column(String, nullable=False)
     approved_at = Column(String, nullable=True)
+    approved_by = Column(String, nullable=True)
     published_at = Column(String, nullable=True)
     instagram_post_id = Column(String, nullable=True)
     rejection_reason = Column(Text, nullable=True)
@@ -101,6 +103,20 @@ class PostImage(Base):
 
 # Create tables on import
 Base.metadata.create_all(bind=engine)
+
+
+def _ensure_approved_by_column():
+    """create_all never adds columns to existing tables."""
+    with engine.begin() as conn:
+        if engine.dialect.name == "postgresql":
+            conn.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS approved_by VARCHAR"))
+        else:
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(posts)"))]
+            if "approved_by" not in cols:
+                conn.execute(text("ALTER TABLE posts ADD COLUMN approved_by VARCHAR"))
+
+
+_ensure_approved_by_column()
 
 
 # ─── FastAPI Dependency ──────────────────────────────────────────────────────
@@ -134,6 +150,7 @@ def _post_to_dict(post: Post) -> dict:
         "approval_token": post.approval_token,
         "created_at": post.created_at,
         "approved_at": post.approved_at,
+        "approved_by": post.approved_by,
         "published_at": post.published_at,
         "instagram_post_id": post.instagram_post_id,
         "rejection_reason": post.rejection_reason,
@@ -204,6 +221,7 @@ def update_post_status(
     status: PostStatus,
     rejection_reason: str | None = None,
     instagram_post_id: str | None = None,
+    approved_by: str | None = None,
 ):
     db = SessionLocal()
     try:
@@ -216,6 +234,8 @@ def update_post_status(
 
         if status == PostStatus.APPROVED:
             post.approved_at = now
+            if approved_by:
+                post.approved_by = approved_by
         elif status == PostStatus.PUBLISHED:
             post.published_at = now
             post.instagram_post_id = instagram_post_id

@@ -1,6 +1,7 @@
 """Email service for sending approval emails to Nitesh."""
 
 from pathlib import Path
+from urllib.parse import quote_plus
 
 import resend
 from jinja2 import Template
@@ -26,43 +27,40 @@ def send_approval_email(post_data: dict) -> str:
         raise RuntimeError("RESEND_API_KEY is not configured")
     resend.api_key = settings.resend_api_key
 
-    # Build approval/reject URLs
     base = settings.server_base_url.rstrip("/")
     token = post_data["approval_token"]
-    approve_url = f"{base}/approve/{token}"
-    reject_url = f"{base}/reject/{token}"
-    preview_url = f"{base}/preview/{token}"
-    revise_url = f"{base}/revise/{token}"
     image_url = post_data.get("image_url") or public_image_url(base, token)
+    template = Template(TEMPLATE_PATH.read_text())
 
-    # Render the email template
-    template_str = TEMPLATE_PATH.read_text()
-    template = Template(template_str)
-    html_body = template.render(
-        hook=post_data.get("hook", ""),
-        caption=post_data.get("caption", ""),
-        hashtags=post_data.get("hashtags", ""),
-        image_prompt=post_data.get("image_prompt", ""),
-        theme=post_data.get("theme", "Mindfulness"),
-        cta=post_data.get("cta", ""),
-        alt_text=post_data.get("alt_text", ""),
-        approve_url=approve_url,
-        reject_url=reject_url,
-        preview_url=preview_url,
-        revise_url=revise_url,
-        image_url=image_url,
-    )
+    # Each approver gets their own links carrying their identity, so the
+    # server can tell the second approver who already acted on the post.
+    email_id = "unknown"
+    for recipient in settings.approval_email_list:
+        by = quote_plus(recipient)
+        html_body = template.render(
+            hook=post_data.get("hook", ""),
+            caption=post_data.get("caption", ""),
+            hashtags=post_data.get("hashtags", ""),
+            image_prompt=post_data.get("image_prompt", ""),
+            theme=post_data.get("theme", "Mindfulness"),
+            cta=post_data.get("cta", ""),
+            alt_text=post_data.get("alt_text", ""),
+            approve_url=f"{base}/approve/{token}?by={by}",
+            reject_url=f"{base}/reject/{token}?by={by}",
+            preview_url=f"{base}/preview/{token}",
+            revise_url=f"{base}/revise/{token}?by={by}",
+            image_url=image_url,
+        )
 
-    # Send via Resend
-    response = resend.Emails.send(
-        {
-            "from": settings.from_email,
-            "to": [settings.approval_email],
-            "subject": f"🧘 New Mindful Post for Review — {post_data.get('theme', 'Mindfulness for Teens')}",
-            "html": html_body,
-        }
-    )
+        response = resend.Emails.send(
+            {
+                "from": settings.from_email,
+                "to": [recipient],
+                "subject": f"🧘 New Mindful Post for Review — {post_data.get('theme', 'Mindfulness for Teens')}",
+                "html": html_body,
+            }
+        )
 
-    email_id = response.get("id", "unknown") if isinstance(response, dict) else getattr(response, "id", "unknown")
-    print(f"📧 Approval email sent to {settings.approval_email} (ID: {email_id})")
+        email_id = response.get("id", "unknown") if isinstance(response, dict) else getattr(response, "id", "unknown")
+        print(f"📧 Approval email sent to {recipient} (ID: {email_id})")
     return email_id

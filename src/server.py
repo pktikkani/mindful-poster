@@ -10,6 +10,7 @@ Endpoints:
 """
 import json
 import os
+from urllib.parse import quote_plus
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -48,17 +49,21 @@ app = FastAPI(
 # ─── Approval ────────────────────────────────────────────────────────────────
 
 @app.get("/approve/{token}")
-async def approve_post(token: str):
+async def approve_post(token: str, by: str = ""):
     """Show a safe confirmation page; GET never publishes."""
     post = get_post_by_token(token)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+
+    if post["status"] == PostStatus.PUBLISHED:
+        return HTMLResponse(_already_published_page(post, by))
+
     settings = get_settings()
     image_url = public_image_url(settings.server_base_url, token)
     return HTMLResponse(_confirmation_page(
         title="Publish this post?",
         message="This will publish the reviewed image and caption to @mteenmindful.",
-        action=f"/approve/{token}",
+        action=f"/approve/{token}?by={quote_plus(by)}",
         button_label="Publish to Instagram",
         button_color="#2e7d32",
         image_url=image_url if get_post_image_by_token(token) else None,
@@ -66,18 +71,14 @@ async def approve_post(token: str):
 
 
 @app.post("/approve/{token}")
-async def publish_approved_post(token: str):
+async def publish_approved_post(token: str, by: str = ""):
     """Approve a post and trigger Instagram publishing."""
     post = get_post_by_token(token)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
     if post["status"] == PostStatus.PUBLISHED:
-        return HTMLResponse(_result_page(
-            "Already Published ✅",
-            "This post has already been published to Instagram.",
-            "#2e7d32",
-        ))
+        return HTMLResponse(_already_published_page(post, by))
 
     if post["status"] == PostStatus.REJECTED:
         return HTMLResponse(_result_page(
@@ -95,7 +96,7 @@ async def publish_approved_post(token: str):
         ), status_code=409)
 
     # Mark as approved only after the exact image is known to exist.
-    update_post_status(post["id"], PostStatus.APPROVED)
+    update_post_status(post["id"], PostStatus.APPROVED, approved_by=by or None)
 
     # Try to publish to Instagram
     try:
@@ -517,6 +518,18 @@ async def health():
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def _already_published_page(post: dict, viewer: str) -> str:
+    """Tell the second approver who already published this post."""
+    approver = post.get("approved_by")
+    if approver and approver == viewer:
+        message = "You already approved this post — it is live on Instagram."
+    elif approver:
+        message = f"This post was already approved and published by <strong>{approver}</strong>. No action needed."
+    else:
+        message = "This post has already been published to Instagram."
+    return _result_page("Already Published ✅", message, "#2e7d32")
+
 
 def _result_page(title: str, message: str, color: str) -> str:
     """Generate a simple result page HTML."""

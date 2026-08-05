@@ -19,8 +19,12 @@ class Settings(BaseSettings):
     )
     approval_email: str = Field(
         default="nitesh@themindfulinitiative.com",
-        description="Nitesh's email for approvals",
+        description="Approver email(s), comma-separated",
     )
+
+    @property
+    def approval_email_list(self) -> list[str]:
+        return [e.strip() for e in self.approval_email.split(",") if e.strip()]
 
     # Instagram
     instagram_access_token: str = Field(
