@@ -25,7 +25,9 @@ from .database import (
     get_recent_posts,
     update_post_status,
 )
+from . import linkedin
 from .instagram import InstagramPublishError, publish_post, publish_story
+from .linkedin import LinkedInPublishError
 from .media import MediaUploadError, is_meta_blocked_host, public_image_url, upload_for_meta
 
 
@@ -123,12 +125,32 @@ async def publish_approved_post(token: str, by: str = ""):
         except (InstagramPublishError, MediaUploadError) as story_error:
             story_note = f"<em>Feed post is live, but the story failed: {story_error}</em>"
 
+        # LinkedIn failure must not undo the live Instagram post either.
+        linkedin_note = ""
+        if linkedin.is_configured():
+            try:
+                # Prefer the LinkedIn-toned variant; legacy posts fall back
+                # to the Instagram caption.
+                if post.get("linkedin_caption"):
+                    li_caption, li_hashtags = post["linkedin_caption"], ""
+                else:
+                    li_caption, li_hashtags = post["caption"], post["hashtags"]
+                linkedin_urn = linkedin.publish_post(
+                    caption=li_caption,
+                    hashtags=li_hashtags,
+                    image_data=post_image["image_data"],
+                    mime_type=post_image["mime_type"],
+                )
+                linkedin_note = f"<br><em>LinkedIn: {linkedin_urn}</em>"
+            except LinkedInPublishError as linkedin_error:
+                linkedin_note = f"<br><em>Instagram is live, but LinkedIn failed: {linkedin_error}</em>"
+
         return HTMLResponse(_result_page(
             "Post Published! 🧘",
             f"The post has been approved and published to Instagram!<br><br>"
             f"<em>Theme: {post['theme']}</em><br>"
             f"<em>Instagram Post ID: {instagram_post_id}</em><br>"
-            f"{story_note}",
+            f"{story_note}{linkedin_note}",
             "#2e7d32",
         ))
 

@@ -41,6 +41,7 @@ def send_approval_email(post_data: dict) -> str:
             hook=post_data.get("hook", ""),
             caption=post_data.get("caption", ""),
             hashtags=post_data.get("hashtags", ""),
+            linkedin_caption=post_data.get("linkedin_caption", ""),
             image_prompt=post_data.get("image_prompt", ""),
             theme=post_data.get("theme", "Mindfulness"),
             cta=post_data.get("cta", ""),

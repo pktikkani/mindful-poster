@@ -13,7 +13,11 @@ from .content import PostContent
 from .database import create_post, get_used_theme_ids, save_post_image
 from .image_generator import generate_post_visual
 from .media import public_image_url
-from .style_guide import CONTENT_GENERATION_PROMPT, MTEEN_STYLE_SYSTEM_PROMPT
+from .style_guide import (
+    CONTENT_GENERATION_PROMPT,
+    LINKEDIN_ADAPTATION_PROMPT,
+    MTEEN_STYLE_SYSTEM_PROMPT,
+)
 
 THEMES_PATH = Path(__file__).parent.parent / "config" / "content_themes.json"
 
@@ -36,6 +40,26 @@ def pick_theme() -> dict:
         available = themes
 
     return random.choice(available)
+
+
+def generate_linkedin_caption(
+    client: anthropic.Anthropic, hook: str, caption: str, hashtags: str
+) -> str:
+    """Adapt an Instagram post into a LinkedIn company-page post for adults."""
+    response = client.messages.create(
+        model="claude-sonnet-4-5-20250929",
+        max_tokens=600,
+        system=MTEEN_STYLE_SYSTEM_PROMPT,
+        messages=[
+            MessageParam(
+                role="user",
+                content=LINKEDIN_ADAPTATION_PROMPT.format(
+                    hook=hook, caption=caption, hashtags=hashtags
+                ),
+            )
+        ],
+    )
+    return response.content[0].text.strip()
 
 
 def generate_post(
@@ -120,6 +144,17 @@ Please generate a completely revised version that addresses this feedback while 
     post_content = PostContent.model_validate_json(raw_text)
     post_data = post_content.model_dump()
 
+    # A missing LinkedIn variant must not block the Instagram pipeline;
+    # the approve flow falls back to the Instagram caption.
+    try:
+        linkedin_caption = generate_linkedin_caption(
+            client, post_content.hook, post_content.caption, post_content.hashtags
+        )
+    except anthropic.AnthropicError as e:
+        print(f"⚠️ LinkedIn caption generation failed: {e}")
+        linkedin_caption = ""
+    post_data["linkedin_caption"] = linkedin_caption
+
     approval_token = secrets.token_urlsafe(32)
 
     # Generate before inserting so an image failure cannot leave an approvable,
@@ -142,6 +177,7 @@ Please generate a completely revised version that addresses this feedback while 
         cta=post_data.get("cta", ""),
         approval_token=approval_token,
         metadata=json.dumps(metadata),
+        linkedin_caption=linkedin_caption,
     )
     save_post_image(post_id, visual.image_bytes, visual.mime_type)
 

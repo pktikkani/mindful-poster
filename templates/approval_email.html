@@ -73,12 +73,30 @@
             </td>
         </tr>
 
+        {% if linkedin_caption %}
+        <!-- LinkedIn Preview (same image, adapted text for the company page) -->
+        <tr>
+            <td style="padding: 16px 32px;">
+                <div style="border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden;">
+                    <div style="padding: 12px 16px; border-bottom: 1px solid #efefef; background: #f3f6f8;">
+                        <span style="font-size: 14px; font-weight: 600; color: #0a66c2;">
+                            in&nbsp; mTeen Wellness — LinkedIn version (same image)
+                        </span>
+                    </div>
+                    <div style="padding: 16px;">
+                        <p style="margin: 0; font-size: 14px; line-height: 1.7; color: #262626; white-space: pre-line;">{{ linkedin_caption }}</p>
+                    </div>
+                </div>
+            </td>
+        </tr>
+        {% endif %}
+
         <!-- Action Buttons -->
         <tr>
             <td style="padding: 24px 32px; text-align: center;">
                 <p style="margin: 0 0 16px; font-size: 14px; color: #555;">
                     What would you like to do with this post?
-                    <br>Approving publishes this image to the feed and as a story (same image on a blurred 9:16 backdrop).
+                    <br>Approving publishes this image to the feed and as a story (same image on a blurred 9:16 backdrop){% if linkedin_caption %}, plus the LinkedIn version above to the mTeen Wellness page{% endif %}.
                 </p>
                 
                 <!-- Approve Button -->

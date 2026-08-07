@@ -42,6 +42,36 @@ Return only valid JSON with exactly these fields:
 """
 
 
+LINKEDIN_ADAPTATION_PROMPT = """Rewrite this mTeen Instagram post as a LinkedIn
+post for the mTeen Wellness company page.
+
+LinkedIn audience: parents, educators, school counsellors, and wellness
+professionals in India — adults who care about teen mental health, not the
+teens themselves. Speak to them about what teens experience.
+
+Rules:
+- Professional-warm tone. No teen slang, at most one emoji, no emoji lists.
+- 60-140 words, short paragraphs. Open with an observation adults will
+  recognise (exam season, screen time, pressure at home), then share the
+  practice or reminder from the original post.
+- Keep the same safety rules: no diagnoses, no treatment promises, no
+  invented research. Prefer "can help" over "cures".
+- End with a one-line invitation to follow mTeen Wellness for teen
+  mental-wellness resources.
+- Finish with 3-5 hashtags on their own line, always including
+  #TeenMentalHealth and #mTeenWellness.
+
+Original Instagram post:
+Hook: {hook}
+
+Caption:
+{caption}
+
+Hashtags: {hashtags}
+
+Return only the LinkedIn post text (hashtag line included). No JSON, no preamble."""
+
+
 CONTENT_GENERATION_PROMPT = """Create one fresh mTeen Instagram post.
 
 Theme: {theme}

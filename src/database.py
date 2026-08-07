@@ -85,6 +85,7 @@ class Post(Base):
     approved_by = Column(String, nullable=True)
     published_at = Column(String, nullable=True)
     instagram_post_id = Column(String, nullable=True)
+    linkedin_caption = Column(Text, nullable=True)
     rejection_reason = Column(Text, nullable=True)
     metadata_ = Column("metadata", Text, default="{}")
 
@@ -105,18 +106,21 @@ class PostImage(Base):
 Base.metadata.create_all(bind=engine)
 
 
-def _ensure_approved_by_column():
+def _ensure_columns():
     """create_all never adds columns to existing tables."""
+    added = {"approved_by": "VARCHAR", "linkedin_caption": "TEXT"}
     with engine.begin() as conn:
         if engine.dialect.name == "postgresql":
-            conn.execute(text("ALTER TABLE posts ADD COLUMN IF NOT EXISTS approved_by VARCHAR"))
+            for name, coltype in added.items():
+                conn.execute(text(f"ALTER TABLE posts ADD COLUMN IF NOT EXISTS {name} {coltype}"))
         else:
             cols = [row[1] for row in conn.execute(text("PRAGMA table_info(posts)"))]
-            if "approved_by" not in cols:
-                conn.execute(text("ALTER TABLE posts ADD COLUMN approved_by VARCHAR"))
+            for name, coltype in added.items():
+                if name not in cols:
+                    conn.execute(text(f"ALTER TABLE posts ADD COLUMN {name} {coltype}"))
 
 
-_ensure_approved_by_column()
+_ensure_columns()
 
 
 # ─── FastAPI Dependency ──────────────────────────────────────────────────────
@@ -153,6 +157,7 @@ def _post_to_dict(post: Post) -> dict:
         "approved_by": post.approved_by,
         "published_at": post.published_at,
         "instagram_post_id": post.instagram_post_id,
+        "linkedin_caption": post.linkedin_caption,
         "rejection_reason": post.rejection_reason,
         "metadata": post.metadata_,
     }
@@ -172,6 +177,7 @@ def create_post(
     cta: str = "",
     approval_token: str = "",
     metadata: str = "{}",
+    linkedin_caption: str = "",
 ) -> int:
     """Insert a new post and return its ID."""
     db = SessionLocal()
@@ -189,6 +195,7 @@ def create_post(
             approval_token=approval_token,
             created_at=datetime.now(timezone.utc).isoformat(),
             metadata_=metadata,
+            linkedin_caption=linkedin_caption,
         )
         db.add(post)
         db.commit()
@@ -243,6 +250,17 @@ def update_post_status(
             post.rejection_reason = rejection_reason
 
         db.commit()
+    finally:
+        db.close()
+
+
+def set_linkedin_caption(post_id: int, linkedin_caption: str):
+    db = SessionLocal()
+    try:
+        post = db.execute(select(Post).filter(Post.id == post_id)).scalar_one_or_none()
+        if post:
+            post.linkedin_caption = linkedin_caption
+            db.commit()
     finally:
         db.close()
 

@@ -1,28 +1,29 @@
-# STATUS — 2026-08-05
+# STATUS — 2026-08-07
 
-## Last session outcome
-- Post 17 published to Instagram (IG post ID `18100645964630953`).
-- Post 18 ("First Heartbreak"): approved by Nitesh, publish failed on the tunnel-domain issue; per Pavan, left **unpublished** intentionally.
-- **Fix shipped (uncommitted)**: `src/media.py` + `src/server.py` — when `SERVER_BASE_URL` is a tunnel/localhost host (`is_meta_blocked_host`), the approve flow re-hosts the exact stored image via `upload_for_meta()` (catbox.moe) before calling Instagram. Dry-run verified: container creation 200 with re-hosted URL.
-- Post 19 ("10 minutes outside resets your mind") generated and emailed to Nitesh for approval — his Approve click should now publish end-to-end.
-- **Stories added (uncommitted)**: Approve now also publishes a 9:16 story derived from the exact approved image (blurred backdrop, `compose_story_card` in `image_generator.py`; `publish_story` in `instagram.py`; wired non-fatally in the approve flow — a story failure never undoes the live feed post). Dry-run verified: STORIES container 200. Story image is derived at publish time, not stored in DB.
-- Approval email goes to **two approvers** (`APPROVAL_EMAIL` in `.env`, comma-separated: nitesh.batra@gmail.com, pavan@prag-matic.com). Each gets their own links with `?by=<email>`; first Approve publishes and records `approved_by` (new column on `posts`, auto-migrated on startup); the second approver then sees "already approved and published by <other>". Post 19 backfilled with approved_by=nitesh.
-- Post 19 was approved by Nitesh and published (IG `18000759905994072`) — before the story feature went live, so it has no story. A duplicate approval email for post 19 was also resent (harmless — resolves to the already-published page).
+## Last session outcome: LinkedIn cross-posting built, waiting on LinkedIn approval
+- **LinkedIn publishing wired in (committed & pushed to main)**: Approve now also posts to the mTeen Wellness company page (`linkedin.com/company/mteen-wellness`), non-fatally — a LinkedIn failure never affects the live IG post (same pattern as stories).
+  - `src/linkedin.py` (new): Posts API — image goes up as a **direct binary upload**, so the Meta tunnel-domain problem does not apply to LinkedIn. Includes `validate_credentials()`.
+  - LinkedIn text is a **separate generated variant**, not the IG caption: `generate_linkedin_caption()` in `generator.py` + `LINKEDIN_ADAPTATION_PROMPT` in `style_guide.py` — professional-warm, written for parents/educators/counsellors, 3-5 hashtags. Stored in new `posts.linkedin_caption` column (auto-migrated via `_ensure_columns()` in `database.py`). Generation failure falls back to IG caption, never blocks the pipeline.
+  - Approval email now shows both versions (LinkedIn card in `templates/approval_email.html`); one Approve publishes IG feed + story + LinkedIn.
+  - Approve flow skips LinkedIn silently until `LINKEDIN_ACCESS_TOKEN` + `LINKEDIN_ORGANIZATION_ID` are set in `.env`.
+- **Test preview sent** to pavan@prag-matic.com only (Resend `ef1eec0b…`): post 19's image with IG caption vs generated LinkedIn version. Post 19's `linkedin_caption` backfilled in DB. Nothing published; Nitesh not emailed.
+- All 8 tests pass.
 
-## Key finding (blocks future publishes)
-**Meta rejects tunnel domains as `image_url`** (`trycloudflare.com`, `ngrok-free.app`) with error 9004 / subcode 2207052 "Only photo or video can be accepted as media type" — it won't even fetch the image. Verified: same account/token succeeds instantly with a normal public image URL. ngrok free additionally serves an HTML interstitial to browser UAs.
+## LinkedIn setup — where it stands (BLOCKED on LinkedIn review, a few days)
+Done today: app "mTeen Poster" created on developer.linkedin.com (client id `86ks9hjdrr488o`), associated + **verified** with the mTeen Wellness page, redirect URL `http://localhost:8912/callback` added, `LINKEDIN_CLIENT_ID`/`LINKEDIN_CLIENT_SECRET` in `.env`, Community Management API **access request form submitted** (use case: Page management only).
 
-Workaround used: uploaded the exact approved JPEG to catbox.moe and called `publish_post()` directly with that URL, then `update_post_status(..., PUBLISHED)`.
+Key learning: even the **Development tier requires the access form + review** (verified business email, registered legal org, website, privacy policy). Until approved, `w_organization_social` is missing from the Auth tab and OAuth fails with `invalid_scope_error` — that's the observed state, not a bug.
 
-## Running processes (this machine, will not survive reboot)
-- uvicorn on :8000 (started with `env -u ANTHROPIC_API_KEY` — see below)
-- ngrok tunnel `https://10f0-106-51-46-155.ngrok-free.app` (old email links)
-- cloudflared quick tunnel `https://thriller-telling-healthy-visiting.trycloudflare.com` (current `SERVER_BASE_URL`)
+### When approval email arrives
+1. `! .venv/bin/python scripts/linkedin_auth.py` (browser Allow as page admin) → paste printed `LINKEDIN_ACCESS_TOKEN=…` into `.env` (token ~60 days).
+2. Ensure `LINKEDIN_ORGANIZATION_ID=<numeric id>` in `.env` (from page admin URL `linkedin.com/company/<number>/admin/…`) — Pavan may have done this already.
+3. Validate: `.venv/bin/python -c "from src.linkedin import validate_credentials; validate_credentials()"`.
+4. Restart uvicorn (running server has pre-LinkedIn code).
 
-## Gotcha
-The shell used to launch the server can carry an **empty** `ANTHROPIC_API_KEY` env var that overrides `.env` (pydantic-settings precedence) → "ANTHROPIC_API_KEY is not configured". Start the server with `env -u ANTHROPIC_API_KEY`.
+## Open issues
+- **Posts 20 and 21 are `failed`** (approved, publish failed sometime after Aug 5) — not investigated; flagged to Pavan, no answer yet.
+- Cloudflare tunnel from Aug 5 is **dead**; no server/tunnel currently running. Deploy to a real domain is still next step #1 (fixes IG tunnel-block permanently; LinkedIn doesn't care either way).
+- `.env`/`.env.example` edits are blocked by the user's protect-paths hook — Pavan edits those by hand. `.env.example` still lacks the four LINKEDIN_* lines.
 
-## Next steps
-1. **Deploy the server** (Railway/Render/Fly) with a real domain — fixes publish permanently; tunnels are only viable for the email-approval part, not for Instagram media fetch.
-2. Until deployed, either keep the manual catbox re-host step, or add an upload-to-trusted-host step inside `publish_post`.
-3. Orphan test containers were created during debugging (incl. one with a Wikipedia cat image) — never published, they expire in ~24h on their own.
+## Gotcha (still true)
+Shell can carry an empty `ANTHROPIC_API_KEY` that overrides `.env` — start anything needing Claude with `env -u ANTHROPIC_API_KEY`.

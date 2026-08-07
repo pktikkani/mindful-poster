@@ -34,6 +34,14 @@ class Settings(BaseSettings):
         default="", description="Instagram Business Account ID"
     )
 
+    # LinkedIn
+    linkedin_access_token: str = Field(
+        default="", description="LinkedIn OAuth token with w_organization_social"
+    )
+    linkedin_organization_id: str = Field(
+        default="", description="Numeric ID of the LinkedIn company page"
+    )
+
     # OpenAI image generation
     openai_api_key: str = Field(
         default="", description="OpenAI API key used for branded backgrounds"
