@@ -234,6 +234,40 @@ You should see:
 2. **Email**: Approval email with post preview and Approve/Reject buttons
 3. **Click Approve**: Post publishes to Instagram
 
+#### Triggering a post against production
+
+The same endpoint works on the deployed server (Railway). Use the production
+`SECRET_KEY` (from the Railway service's variables, not your local `.env`):
+
+```bash
+curl -X POST https://mindful-poster.nubewired.com/generate \
+  -H "Authorization: Bearer <production-secret-key>"
+```
+
+The response includes the approval token, and the approval email goes to every
+address in `APPROVAL_EMAIL`. The approval link is
+`https://mindful-poster.nubewired.com/approve/<token>`.
+
+Alternatively, generate from your machine without the HTTP endpoint (uses your
+local `.env.local`, writes to the shared database, and emails the approvers):
+
+```bash
+uv run --with-requirements requirements.txt python -c "
+from dotenv import load_dotenv; load_dotenv('.env.local', override=True)
+import os
+from src.generator import generate_post
+from src.emailer import send_approval_email
+post = generate_post()
+send_approval_email(post)
+base = os.environ['SERVER_BASE_URL'].rstrip('/')
+print(f'{base}/approve/{post[\"approval_token\"]}')"
+```
+
+Note: the approval link always points at `SERVER_BASE_URL`, and publishing runs
+on whichever server serves that link — so images must be reachable by Meta from
+there (tunnel domains like trycloudflare/ngrok are blocked by Meta; the app
+falls back to re-hosting for those).
+
 ### Step 7: Dashboard
 
 View all generated posts and their statuses:
