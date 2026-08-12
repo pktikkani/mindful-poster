@@ -3,7 +3,7 @@ import json
 import os
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -156,18 +156,28 @@ class MediaEndpointTests(unittest.TestCase):
             ),
             patch("src.server.update_post_status"),
             patch("src.server.get_settings", return_value=settings),
-            patch("src.server.publish_post", return_value="feed-id"),
-            patch("src.server.publish_story", return_value="story-id") as publish_story,
-            patch("src.server.upload_for_meta") as upload_for_meta,
+            patch(
+                "src.server.publish_post",
+                new_callable=AsyncMock,
+                return_value="feed-id",
+            ),
+            patch(
+                "src.server.publish_story",
+                new_callable=AsyncMock,
+                return_value="story-id",
+            ) as publish_story,
+            patch(
+                "src.server.upload_for_meta", new_callable=AsyncMock
+            ) as upload_for_meta,
             patch("src.server.linkedin.is_configured", return_value=False),
         ):
             response = TestClient(app).post("/approve/safe-token")
 
         self.assertEqual(200, response.status_code)
-        publish_story.assert_called_once_with(
+        publish_story.assert_awaited_once_with(
             "https://mindful-poster.nubewired.com/media/safe-token-story.jpg"
         )
-        upload_for_meta.assert_not_called()
+        upload_for_meta.assert_not_awaited()
 
     def test_robots_allows_meta_to_fetch_post_media(self):
         response = TestClient(app).get("/robots.txt")

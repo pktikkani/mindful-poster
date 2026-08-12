@@ -1,6 +1,6 @@
 """Instagram Graph API publisher for posting approved content."""
 
-import time
+import asyncio
 
 import httpx
 
@@ -13,7 +13,9 @@ class InstagramPublishError(Exception):
     """Raised when Instagram publishing fails."""
 
 
-def publish_post(caption: str, hashtags: str, image_url: str | None = None) -> str:
+async def publish_post(
+    caption: str, hashtags: str, image_url: str | None = None
+) -> str:
     """
     Publish a post to Instagram via Graph API.
     
@@ -63,8 +65,8 @@ def publish_post(caption: str, hashtags: str, image_url: str | None = None) -> s
             "access_token": token,
         }
 
-        with httpx.Client(timeout=30) as client:
-            resp = client.post(container_url, data=container_payload)
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(container_url, data=container_payload)
             _ensure_success(resp, "creating the Instagram media container")
             container_data = resp.json()
 
@@ -75,7 +77,7 @@ def publish_post(caption: str, hashtags: str, image_url: str | None = None) -> s
             print(f"📦 Media container created: {container_id}")
 
             # Step 2: Wait for container to be ready (Instagram processes the image)
-            _wait_for_container(client, container_id, token)
+            await _wait_for_container(client, container_id, token)
 
             # Step 3: Publish the container
             publish_url = f"{GRAPH_API_BASE}/{account_id}/media_publish"
@@ -84,7 +86,7 @@ def publish_post(caption: str, hashtags: str, image_url: str | None = None) -> s
                 "access_token": token,
             }
 
-            resp = client.post(publish_url, data=publish_payload)
+            resp = await client.post(publish_url, data=publish_payload)
             _ensure_success(resp, "publishing the Instagram media container")
             publish_data = resp.json()
 
@@ -100,7 +102,7 @@ def publish_post(caption: str, hashtags: str, image_url: str | None = None) -> s
         raise InstagramPublishError("Instagram API request failed") from exc
 
 
-def publish_story(image_url: str) -> str:
+async def publish_story(image_url: str) -> str:
     """
     Publish an image story via Graph API.
 
@@ -131,8 +133,8 @@ def publish_story(image_url: str) -> str:
             "access_token": token,
         }
 
-        with httpx.Client(timeout=30) as client:
-            resp = client.post(container_url, data=container_payload)
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(container_url, data=container_payload)
             _ensure_success(resp, "creating the Instagram story container")
             container_data = resp.json()
 
@@ -142,7 +144,7 @@ def publish_story(image_url: str) -> str:
             container_id = container_data["id"]
             print(f"📦 Story container created: {container_id}")
 
-            _wait_for_container(client, container_id, token)
+            await _wait_for_container(client, container_id, token)
 
             publish_url = f"{GRAPH_API_BASE}/{account_id}/media_publish"
             publish_payload = {
@@ -150,7 +152,7 @@ def publish_story(image_url: str) -> str:
                 "access_token": token,
             }
 
-            resp = client.post(publish_url, data=publish_payload)
+            resp = await client.post(publish_url, data=publish_payload)
             _ensure_success(resp, "publishing the Instagram story")
             publish_data = resp.json()
 
@@ -166,12 +168,15 @@ def publish_story(image_url: str) -> str:
         raise InstagramPublishError("Instagram API request failed") from exc
 
 
-def _wait_for_container(
-    client: httpx.Client, container_id: str, token: str, max_attempts: int = 10
+async def _wait_for_container(
+    client: httpx.AsyncClient,
+    container_id: str,
+    token: str,
+    max_attempts: int = 10,
 ):
     """Wait for Instagram to finish processing the media container."""
     for attempt in range(max_attempts):
-        resp = client.get(
+        resp = await client.get(
             f"{GRAPH_API_BASE}/{container_id}",
             params={"fields": "status_code", "access_token": token},
         )
@@ -182,12 +187,10 @@ def _wait_for_container(
         if status == "FINISHED":
             return
         elif status == "ERROR":
-            raise InstagramPublishError(
-                f"Media container failed: {data}"
-            )
+            raise InstagramPublishError(f"Media container failed: {data}")
 
         print(f"⏳ Waiting for media processing... (attempt {attempt + 1}/{max_attempts})")
-        time.sleep(3)
+        await asyncio.sleep(3)
 
     raise InstagramPublishError("Media processing timed out")
 

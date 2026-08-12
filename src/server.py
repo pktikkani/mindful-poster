@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from .config import get_settings
@@ -73,9 +74,7 @@ async def approve_post(token: str, by: str = ""):
 
 
 @app.post("/approve/{token}")
-def publish_approved_post(token: str, by: str = ""):
-    # Sync on purpose: FastAPI runs it in a threadpool, keeping the event loop
-    # free to serve /media/... when Meta fetches the image mid-publish.
+async def publish_approved_post(token: str, by: str = ""):
     """Approve a post and trigger Instagram publishing."""
     post = get_post_by_token(token)
     if not post:
@@ -106,11 +105,13 @@ def publish_approved_post(token: str, by: str = ""):
     try:
         settings = get_settings()
         if is_meta_blocked_host(settings.server_base_url):
-            image_url = upload_for_meta(post_image["image_data"], post_image["mime_type"])
+            image_url = await upload_for_meta(
+                post_image["image_data"], post_image["mime_type"]
+            )
         else:
             image_url = public_image_url(settings.server_base_url, token)
 
-        instagram_post_id = publish_post(
+        instagram_post_id = await publish_post(
             caption=post["caption"],
             hashtags=post["hashtags"],
             image_url=image_url,
@@ -122,12 +123,14 @@ def publish_approved_post(token: str, by: str = ""):
             if is_meta_blocked_host(settings.server_base_url):
                 from .image_generator import compose_story_card
 
-                story_bytes = compose_story_card(post_image["image_data"])
-                story_url = upload_for_meta(story_bytes)
+                story_bytes = await run_in_threadpool(
+                    compose_story_card, post_image["image_data"]
+                )
+                story_url = await upload_for_meta(story_bytes)
             else:
                 base_url = settings.server_base_url.rstrip("/")
                 story_url = f"{base_url}/media/{token}-story.jpg"
-            story_id = publish_story(story_url)
+            story_id = await publish_story(story_url)
             story_note = f"<em>Story ID: {story_id}</em>"
         except (InstagramPublishError, MediaUploadError) as story_error:
             story_note = f"<em>Feed post is live, but the story failed: {story_error}</em>"
@@ -142,7 +145,8 @@ def publish_approved_post(token: str, by: str = ""):
                     li_caption, li_hashtags = post["linkedin_caption"], ""
                 else:
                     li_caption, li_hashtags = post["caption"], post["hashtags"]
-                linkedin_urn = linkedin.publish_post(
+                linkedin_urn = await run_in_threadpool(
+                    linkedin.publish_post,
                     caption=li_caption,
                     hashtags=li_hashtags,
                     image_data=post_image["image_data"],
@@ -357,8 +361,9 @@ async def story_media_jpeg(token: str):
 
     from .image_generator import compose_story_card
 
+    story_bytes = await run_in_threadpool(compose_story_card, post_image["image_data"])
     return Response(
-        content=compose_story_card(post_image["image_data"]),
+        content=story_bytes,
         media_type="image/jpeg",
         headers={
             "Cache-Control": "public, max-age=31536000, immutable",

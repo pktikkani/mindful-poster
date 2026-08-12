@@ -23,14 +23,14 @@ def is_meta_blocked_host(base_url: str) -> bool:
     return any(host in base_url for host in META_BLOCKED_HOSTS)
 
 
-def upload_for_meta(image_data: bytes, mime_type: str = "image/jpeg") -> str:
+async def upload_for_meta(image_data: bytes, mime_type: str = "image/jpeg") -> str:
     """Temporarily re-host image bytes for media without a database-backed URL."""
     try:
-        resp = httpx.post(
-            UGUU_API,
-            files={"files[]": ("post.jpg", image_data, mime_type)},
-            timeout=60,
-        )
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                UGUU_API,
+                files={"files[]": ("post.jpg", image_data, mime_type)},
+            )
     except httpx.HTTPError as exc:
         raise MediaUploadError("Image re-hosting request failed") from exc
 
