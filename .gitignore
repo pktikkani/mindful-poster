@@ -7,3 +7,5 @@ data/posts.db-shm
 *.pyc
 .DS_Store
 .idea/
+.env
+.env.*
