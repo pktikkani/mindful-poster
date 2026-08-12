@@ -49,6 +49,8 @@ def publish_post(caption: str, hashtags: str, image_url: str | None = None) -> s
     account_id = settings.instagram_account_id
     token = settings.instagram_access_token
 
+    print(f"🖼️ Feed image_url sent to Meta: {image_url}")
+
     try:
         # Step 1: Create a media container
         container_url = f"{GRAPH_API_BASE}/{account_id}/media"
