@@ -73,7 +73,9 @@ async def approve_post(token: str, by: str = ""):
 
 
 @app.post("/approve/{token}")
-async def publish_approved_post(token: str, by: str = ""):
+def publish_approved_post(token: str, by: str = ""):
+    # Sync on purpose: FastAPI runs it in a threadpool, keeping the event loop
+    # free to serve /media/... when Meta fetches the image mid-publish.
     """Approve a post and trigger Instagram publishing."""
     post = get_post_by_token(token)
     if not post:
