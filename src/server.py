@@ -117,9 +117,14 @@ async def publish_approved_post(token: str, by: str = ""):
 
         # Story failure must not undo a live feed post — report it instead.
         try:
-            from .image_generator import compose_story_card
-            story_bytes = compose_story_card(post_image["image_data"])
-            story_url = upload_for_meta(story_bytes)
+            if is_meta_blocked_host(settings.server_base_url):
+                from .image_generator import compose_story_card
+
+                story_bytes = compose_story_card(post_image["image_data"])
+                story_url = upload_for_meta(story_bytes)
+            else:
+                base_url = settings.server_base_url.rstrip("/")
+                story_url = f"{base_url}/media/{token}-story.jpg"
             story_id = publish_story(story_url)
             story_note = f"<em>Story ID: {story_id}</em>"
         except (InstagramPublishError, MediaUploadError) as story_error:
@@ -339,6 +344,26 @@ def _post_media_response(token: str) -> Response:
 async def robots_txt():
     """Explicitly allow Meta's crawler to fetch generated post media."""
     return "User-agent: *\nAllow: /media/\n"
+
+
+@app.get("/media/{token}-story.jpg")
+async def story_media_jpeg(token: str):
+    """Derive and serve the approved post as a first-party story JPEG."""
+    post_image = get_post_image_by_token(token)
+    if not post_image:
+        raise HTTPException(status_code=404, detail="Post image not found")
+
+    from .image_generator import compose_story_card
+
+    return Response(
+        content=compose_story_card(post_image["image_data"]),
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Content-Disposition": 'inline; filename="mteen-story.jpg"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @app.get("/media/{token}.jpg")

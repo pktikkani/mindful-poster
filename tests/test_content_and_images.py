@@ -118,6 +118,57 @@ class MediaEndpointTests(unittest.TestCase):
         self.assertEqual(payload, response.content)
         image_lookup.assert_called_once_with("safe-token")
 
+    def test_serves_story_card_as_first_party_jpeg(self):
+        source = io.BytesIO()
+        Image.new("RGB", (108, 135), "#6b4f8a").save(source, format="JPEG")
+        with patch(
+            "src.server.get_post_image_by_token",
+            return_value={"image_data": source.getvalue(), "mime_type": "image/jpeg"},
+        ) as image_lookup:
+            response = TestClient(app).get(
+                "/media/safe-token-story.jpg",
+                headers={"User-Agent": "facebookexternalhit/1.1"},
+            )
+
+        story = Image.open(io.BytesIO(response.content))
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("image/jpeg", response.headers["content-type"])
+        self.assertEqual("JPEG", story.format)
+        self.assertEqual((1080, 1920), story.size)
+        image_lookup.assert_called_once_with("safe-token")
+
+    def test_approval_uses_first_party_story_url_on_public_host(self):
+        post = {
+            "id": 42,
+            "status": "pending_approval",
+            "theme": "A calm practice",
+            "caption": "Pause and breathe.",
+            "hashtags": "#MindfulTeens",
+        }
+        settings = SimpleNamespace(
+            server_base_url="https://mindful-poster.nubewired.com"
+        )
+        with (
+            patch("src.server.get_post_by_token", return_value=post),
+            patch(
+                "src.server.get_post_image_by_token",
+                return_value={"image_data": b"jpeg", "mime_type": "image/jpeg"},
+            ),
+            patch("src.server.update_post_status"),
+            patch("src.server.get_settings", return_value=settings),
+            patch("src.server.publish_post", return_value="feed-id"),
+            patch("src.server.publish_story", return_value="story-id") as publish_story,
+            patch("src.server.upload_for_meta") as upload_for_meta,
+            patch("src.server.linkedin.is_configured", return_value=False),
+        ):
+            response = TestClient(app).post("/approve/safe-token")
+
+        self.assertEqual(200, response.status_code)
+        publish_story.assert_called_once_with(
+            "https://mindful-poster.nubewired.com/media/safe-token-story.jpg"
+        )
+        upload_for_meta.assert_not_called()
+
     def test_robots_allows_meta_to_fetch_post_media(self):
         response = TestClient(app).get("/robots.txt")
 

@@ -6,7 +6,7 @@ import httpx
 # error 9004 "Only photo or video can be accepted as media type").
 META_BLOCKED_HOSTS = ("trycloudflare.com", "ngrok-free.app", "ngrok.io", "localhost", "127.0.0.1")
 
-CATBOX_API = "https://catbox.moe/user/api.php"
+UGUU_API = "https://uguu.se/upload.php"
 
 
 class MediaUploadError(RuntimeError):
@@ -24,17 +24,25 @@ def is_meta_blocked_host(base_url: str) -> bool:
 
 
 def upload_for_meta(image_data: bytes, mime_type: str = "image/jpeg") -> str:
-    """Re-host the exact image bytes on a public host Meta will fetch from."""
+    """Temporarily re-host image bytes for media without a database-backed URL."""
     try:
         resp = httpx.post(
-            CATBOX_API,
-            data={"reqtype": "fileupload"},
-            files={"fileToUpload": ("post.jpg", image_data, mime_type)},
+            UGUU_API,
+            files={"files[]": ("post.jpg", image_data, mime_type)},
             timeout=60,
         )
     except httpx.HTTPError as exc:
         raise MediaUploadError("Image re-hosting request failed") from exc
-    url = resp.text.strip()
-    if not resp.is_success or not url.startswith("https://"):
-        raise MediaUploadError(f"Image re-hosting failed: {url[:200]}")
+
+    try:
+        payload = resp.json()
+        url = payload["files"][0]["url"]
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        raise MediaUploadError(f"Image re-hosting failed: {resp.text[:200]}") from exc
+    if (
+        not resp.is_success
+        or payload.get("success") is not True
+        or not url.startswith("https://")
+    ):
+        raise MediaUploadError(f"Image re-hosting failed: {resp.text[:200]}")
     return url
