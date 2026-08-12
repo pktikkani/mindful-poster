@@ -49,7 +49,10 @@ def publish_post(caption: str, hashtags: str, image_url: str | None = None) -> s
     account_id = settings.instagram_account_id
     token = settings.instagram_access_token
 
-    print(f"🖼️ Feed image_url sent to Meta: {image_url}")
+    print(
+        f"🖼️ Feed image_url sent to Meta: {image_url} "
+        f"(account={account_id}, token=…{token[-6:]})"
+    )
 
     try:
         # Step 1: Create a media container
@@ -194,7 +197,10 @@ def _ensure_success(response: httpx.Response, action: str):
     if response.is_success:
         return
     try:
-        message = response.json().get("error", {}).get("message")
+        error = response.json().get("error", {})
+        error.pop("fbtrace_id", None)
+        print(f"❌ Graph API error while {action}: {error}")
+        message = error.get("message")
     except ValueError:
         message = None
     detail = message or f"HTTP {response.status_code}"
